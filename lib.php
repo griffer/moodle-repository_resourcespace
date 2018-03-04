@@ -30,18 +30,23 @@ class repository_resourcespace extends repository {
         $this->resourcespace_api_url = get_config('resourcespace', 'resourcespace_api_url');
         $this->api_key = get_config('resourcespace', 'api_key');
         $this->api_user = get_config('resourcespace', 'api_user');
+        $this->enable_help = get_config('resourcespace', 'enable_help');
+        $this->enable_help_url = get_config('resourcespace', 'enable_help_url');
     }
 
     public function get_listing($path = '', $page = '') {
-        $listArray=Array();
+        $listArray = Array();
         $listArray['list'] = array();
         $listArray['norefresh'] = true;
         $listArray['nologin'] = true;
+        if ($this->enable_help == 1) {
+            $listArray['help'] = "$this->enable_help_url";
+        } 
         return $listArray;
     }
 
     public function print_search() {    
-        $search = '<input class="form-control" style="margin:2px;" name="s" id="s" type="text"/>';
+        $search = '<input class="form-control" id="reposearch" name="s" placeholder="Search" type="search">';
         return $search;
     }
 
@@ -50,18 +55,19 @@ class repository_resourcespace extends repository {
         
         $search_text = urlencode($search_text);
 
-        // Resourcespace search string
-        $query="user=" . "$this->api_user" . "&function=search_get_previews&param1=$search_text&param2=&param3=&param4=&param5=-1&param6=desc&param7=&param8=thm,scr&param9=";      
+        // Resourcespace search string.
+        $query= "user=" . "$this->api_user" . "&function=search_get_previews&param1=$search_text"
+        . "&param2=&param3=&param4=&param5=-1&param6=desc&param7=&param8=thm,scr&param9=";      
 
-        // Sign the request with the private key
-        $sign=hash("sha256",$this->api_key . $query);
+        // Sign the request with the private key.
+        $sign = hash("sha256",$this->api_key . $query);
 
-        // Send request to server
-        $response=(file_get_contents("$this->resourcespace_api_url" . $query . "&sign=" . $sign));
+        // Send request to server.
+        $response = (file_get_contents("$this->resourcespace_api_url" . $query . "&sign=" . $sign));
 
         $jsonArray = json_decode($response);
 
-        $listArray=Array();
+        $listArray = Array();
 
         // Working around a minor resourcespace bug, where resourcespace returns an error
         // when no files match the search. Afterwards the response is parsed.
@@ -74,9 +80,13 @@ class repository_resourcespace extends repository {
                 $srcExtension = $value->file_extension;
                 $modifyDate = $value->file_modified;
                 $modifyDate = strtotime($modifyDate);
-            // Parsing the resourcespace ref and file extension as the filesource, because the
-            // resourcespace api does not return the actual source at this point.
-                $list[] = array('title' => "$id", 'thumbnail' => $thumbnail, 'source' => "$ref,$srcExtension", 'datemodified' => "$modifyDate", 'author' => 'IA Sprog');
+                // Parsing the resourcespace ref and file extension as the filesource, because the
+                // resourcespace api does not return the actual source at this point.
+                $list[] = array('title' => "$id",
+                                'thumbnail' => $thumbnail,
+                                'source' => "$ref,$srcExtension",
+                                'datemodified' => "$modifyDate",
+                                'author' => 'IA Sprog');
             }
             $listArray['list'] = $list;
         } else {
@@ -84,17 +94,20 @@ class repository_resourcespace extends repository {
         }
         $listArray['norefresh'] = true;
         $listArray['nologin'] = true;
+        if ($this->enable_help == 1) {
+            $listArray['help'] = "$this->enable_help_url";
+        } 
         $listArray['issearchresult'] = true;
         return $listArray;
     }
 
     public function get_file($url, $filename = '') {
         // We have to catch the url, and make an additional request to the resourcespace api,
-        // to get the actual filesource
+        // to get the actual filesource.
         $fileInfo = explode(',', $url);
-        $subQuery="user=" . "$this->api_user" . "&function=get_resource_path&param1=" . "$fileInfo[0]" ."&param2&param3=&param4=&param5=" . "$fileInfo[1]" . "&param6=&param7=&param8=";
-        $sign=hash("sha256",$this->api_key . $subQuery);
-        $fileSource=(file_get_contents("$this->resourcespace_api_url" . $subQuery . "&sign=" . $sign));
+        $subQuery = "user=" . "$this->api_user" . "&function=get_resource_path&param1=" . "$fileInfo[0]" ."&param2&param3=&param4=&param5=" . "$fileInfo[1]" . "&param6=&param7=&param8=";
+        $sign = hash("sha256",$this->api_key . $subQuery);
+        $fileSource = (file_get_contents("$this->resourcespace_api_url" . $subQuery . "&sign=" . $sign));
         $fileSource = json_decode($fileSource);
         $url = $fileSource;
         $path = $this->prepare_file($filename);
@@ -119,7 +132,7 @@ class repository_resourcespace extends repository {
     }
 
     public static function get_type_option_names() {
-        return array_merge(parent::get_type_option_names(), array('resourcespace_api_url','api_user','api_key'));
+        return array_merge(parent::get_type_option_names(), array('resourcespace_api_url','api_user','api_key','enable_help','enable_help_url'));
     }
 
     public static function type_config_form($mform, $classname = 'repository') {
@@ -141,5 +154,14 @@ class repository_resourcespace extends repository {
         $mform->setType('api_key', PARAM_RAW_TRIMMED);
         $mform->addRule('api_key', '', 'required', null, 'client');
         $mform->addElement('static', null, '', get_string('api_key_help', 'repository_resourcespace'));
+
+        $mform->addElement('html', '<hr>');
+        $mform->addElement('html', '<h2>Miscellaneous settings</h2>');
+
+        $mform->addElement('checkbox', 'enable_help', get_string('enable_help', 'repository_resourcespace'));
+        $mform->addElement('static', null, '', get_string('enable_help_help', 'repository_resourcespace'));
+
+        $mform->addElement('text', 'enable_help_url', get_string('enable_help_url', 'repository_resourcespace'));
+        $mform->addElement('static', null, '', get_string('enable_help_url_help', 'repository_resourcespace'));
     }
 }
