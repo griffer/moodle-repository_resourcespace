@@ -28,3 +28,4 @@ $plugin->version   = 2017030301;        // The current plugin version (Date: YYY
 $plugin->requires  = 2016112900;        // Requires this Moodle version
 $plugin->component = 'repository_resourcespace'; // Full name of the plugin (used for diagnostics)
 $plugin->release = '1.0';
+$plugin->maturity = MATURITY_STABLE;
