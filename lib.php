@@ -41,26 +41,26 @@ class repository_resourcespace extends repository {
         $listArray['nologin'] = true;
         if ($this->enable_help == 1) {
             $listArray['help'] = "$this->enable_help_url";
-        } 
+        }
         return $listArray;
     }
 
-    public function print_search() {    
+    public function print_search() {
         $search = '<input class="form-control" id="reposearch" name="s" placeholder="Search" type="search">';
         return $search;
     }
 
     public function search($search_text, $page = 0) {
         $search_text = optional_param('s', '*', PARAM_TEXT);
-        
+
         $search_text = urlencode($search_text);
 
         // Resourcespace search string.
         $query= "user=" . "$this->api_user" . "&function=search_get_previews&param1=$search_text"
-        . "&param2=&param3=&param4=&param5=-1&param6=desc&param7=&param8=thm,scr&param9=";      
+        . "&param2=&param3=&param4=&param5=-1&param6=desc&param7=&param8=thm,scr&param9=";
 
         // Sign the request with the private key.
-        $sign = hash("sha256",$this->api_key . $query);
+        $sign = hash("sha256", $this->api_key . $query);
 
         // Send request to server.
         $response = (file_get_contents("$this->resourcespace_api_url" . $query . "&sign=" . $sign));
@@ -72,7 +72,7 @@ class repository_resourcespace extends repository {
         // Working around a minor resourcespace bug, where resourcespace returns an error
         // when no files match the search. Afterwards the response is parsed.
         if (is_array($jsonArray)) {
-            foreach($jsonArray as $value){
+            foreach ($jsonArray as $value) {
                 $ref = $value->ref;
                 $id = $value->field8;
                 $thumbnail = $value->url_thm;
@@ -96,7 +96,7 @@ class repository_resourcespace extends repository {
         $listArray['nologin'] = true;
         if ($this->enable_help == 1) {
             $listArray['help'] = "$this->enable_help_url";
-        } 
+        }
         $listArray['issearchresult'] = true;
         return $listArray;
     }
@@ -106,7 +106,7 @@ class repository_resourcespace extends repository {
         // to get the actual filesource.
         $fileInfo = explode(',', $url);
         $subQuery = "user=" . "$this->api_user" . "&function=get_resource_path&param1=" . "$fileInfo[0]" ."&param2&param3=&param4=&param5=" . "$fileInfo[1]" . "&param6=&param7=&param8=";
-        $sign = hash("sha256",$this->api_key . $subQuery);
+        $sign = hash("sha256", $this->api_key . $subQuery);
         $fileSource = (file_get_contents("$this->resourcespace_api_url" . $subQuery . "&sign=" . $sign));
         $fileSource = json_decode($fileSource);
         $url = $fileSource;
