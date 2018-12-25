@@ -35,7 +35,7 @@ class repository_resourcespace extends repository {
     }
 
     public function get_listing($path = '', $page = '') {
-        $listArray = Array();
+        $listArray = array();
         $listArray['list'] = array();
         $listArray['norefresh'] = true;
         $listArray['nologin'] = true;
@@ -67,7 +67,7 @@ class repository_resourcespace extends repository {
 
         $jsonArray = json_decode($response);
 
-        $listArray = Array();
+        $listArray = array();
 
         // Working around a minor resourcespace bug, where resourcespace returns an error
         // when no files match the search. Afterwards the response is parsed.
