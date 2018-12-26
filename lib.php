@@ -55,54 +55,24 @@ class repository_resourcespace extends repository {
         return $listArray;
     }
 
-    public function search($search_text, $page = 0) {
-        $search_text = optional_param('s', '*', PARAM_TEXT);
+    public function search($searchText, $page = 0) {
+        $listArray = array(
+            'list' => array(),
+            'norefresh' => true,
+            'nologin' => true,
+            'dynload' => true,
+            'issearchresult' => true,
+        );
 
-        $search_text = urlencode($search_text);
-
-        // Resourcespace search string.
-        $query= "user=" . "$this->api_user" . "&function=search_get_previews&param1=$search_text"
-        . "&param2=&param3=&param4=&param5=-1&param6=desc&param7=&param8=thm,scr&param9=";
-
-        // Sign the request with the private key.
-        $sign = hash("sha256", $this->api_key . $query);
-
-        // Send request to server.
-        $response = (file_get_contents("$this->resourcespace_api_url" . $query . "&sign=" . $sign));
-
-        $jsonArray = json_decode($response);
-
-        $listArray = array();
-
-        // Working around a minor resourcespace bug, where resourcespace returns an error
-        // when no files match the search. Afterwards the response is parsed.
-        if (is_array($jsonArray)) {
-            foreach ($jsonArray as $value) {
-                $ref = $value->ref;
-                $id = $value->field8;
-                $thumbnail = $value->url_thm;
-                $src = $value->url_scr;
-                $srcExtension = $value->file_extension;
-                $modifyDate = $value->file_modified;
-                $modifyDate = strtotime($modifyDate);
-                // Parsing the resourcespace ref and file extension as the filesource, because the
-                // resourcespace api does not return the actual source at this point.
-                $list[] = array('title' => "$id",
-                                'thumbnail' => $thumbnail,
-                                'source' => "$ref,$srcExtension",
-                                'datemodified' => "$modifyDate",
-                                'author' => 'IA Sprog');
-            }
-            $listArray['list'] = $list;
-        } else {
-            $listArray['list'] = array();
-        }
-        $listArray['norefresh'] = true;
-        $listArray['nologin'] = true;
         if ($this->enable_help == 1) {
             $listArray['help'] = "$this->enable_help_url";
         }
-        $listArray['issearchresult'] = true;
+
+        $collections = $this->do_search_collections($searchText);
+        $resources = $this->do_search_resources($searchText);
+
+        $listArray['list'] = array_merge($collections, $resources);
+
         return $listArray;
     }
 
@@ -110,18 +80,19 @@ class repository_resourcespace extends repository {
         // We have to catch the url, and make an additional request to the resourcespace api,
         // to get the actual filesource.
         $fileInfo = explode(',', $url);
-        $subQuery = "user=" . "$this->api_user" . "&function=get_resource_path&param1=" . "$fileInfo[0]" ."&param2&param3=&param4=&param5=" . "$fileInfo[1]" . "&param6=&param7=&param8=";
-        $sign = hash("sha256", $this->api_key . $subQuery);
-        $fileSource = (file_get_contents("$this->resourcespace_api_url" . $subQuery . "&sign=" . $sign));
-        $fileSource = json_decode($fileSource);
-        $url = $fileSource;
-        $path = $this->prepare_file($filename);
-        $c = new curl;
-        $result = $c->download_one($url, null, array('filepath' => $path, 'timeout' => self::GETFILE_TIMEOUT));
-        if ($result !== true) {
-            throw new moodle_exception('errorwhiledownload', 'repository', '', $result);
-        }
-        return array('path'=>$path, 'url'=>$url);
+
+        $resourceUrl = $this->make_api_request('get_resource_path', array(
+            'param1' => $fileInfo[0], // $resource
+            'param2' => '0',          // $getfilepath
+            'param3' => '',           // $size
+            'param5' => $fileInfo[1], // $extension
+        ));
+
+        // Call the method of the parent class, then overwrite the URL back to what was passed to us
+        $result = parent::get_file($resourceUrl, $filename);
+        $result['url'] = $url;
+
+        return $result;
     }
 
     public function supported_filetypes() {
@@ -186,6 +157,33 @@ class repository_resourcespace extends repository {
                     'path' => $collection->ref,
                     'date' => strtotime($collection->created),
                     'children' => array(),
+                );
+            }
+        }
+
+        return $list;
+    }
+
+    // Perform a search for resources and return a list of elements suitable for Moodle
+    protected function do_search_resources($searchText = '') {
+        $list = array();
+
+        $resources = $this->make_api_request('search_get_previews', array(
+            'param1' => $searchText, // $search
+            // 'param3' => 'title',     // $order_by
+            'param5' => '-1',        // $fetchrows
+            'param8' => 'thm',       // $getsizes
+        ));
+
+        if (is_array($resources)) {
+            foreach ($resources as $resource) {
+                $list[] = array(
+                    'title' => $resource->field8,
+                    'thumbnail' => $resource->url_thm,
+                    // Parsing the resourcespace ref and file extension as the filesource, because the
+                    // resourcespace api does not return the actual source at this point.
+                    'source' => sprintf('%s,%s', $resource->ref, $resource->file_extension),
+                    'datemodified' => strtotime($resource->file_modified),
                 );
             }
         }
