@@ -35,13 +35,23 @@ class repository_resourcespace extends repository {
     }
 
     public function get_listing($path = '', $page = '') {
-        $listArray = array();
-        $listArray['list'] = array();
-        $listArray['norefresh'] = true;
-        $listArray['nologin'] = true;
+        if ($path !== '') {
+            // Redirect to search, asking to list files within the given collection
+            return $this->search(sprintf('!collection%s', $path), $page);
+        }
+
+        $listArray = array(
+            'list' => $this->do_search_collections(),
+            'norefresh' => true,
+            'nologin' => true,
+            'dynload' => true,
+            'issearchresult' => false,
+        );
+
         if ($this->enable_help == 1) {
             $listArray['help'] = "$this->enable_help_url";
         }
+
         return $listArray;
     }
 
@@ -158,5 +168,44 @@ class repository_resourcespace extends repository {
 
         $mform->addElement('text', 'enable_help_url', get_string('enable_help_url', 'repository_resourcespace'));
         $mform->addElement('static', null, '', get_string('enable_help_url_help', 'repository_resourcespace'));
+    }
+
+    // Perform a search for collections and return a list of elements suitable for Moodle
+    protected function do_search_collections($searchText = '') {
+        $list = array();
+
+        $collections = $this->make_api_request('search_public_collections', array(
+            'param1' => $searchText,
+            // 'param2' => 'c.name',
+        ));
+
+        if (is_array($collections)) {
+            foreach ($collections as $collection) {
+                $list[] = array(
+                    'title' => $collection->name,
+                    'path' => $collection->ref,
+                    'date' => strtotime($collection->created),
+                    'children' => array(),
+                );
+            }
+        }
+
+        return $list;
+    }
+
+    // Make an API request
+    protected function make_api_request($method, $queryData) {
+        $queryData['user'] = $this->api_user;
+        $queryData['function'] = $method;
+
+        $query = http_build_query($queryData, '', '&');
+
+        // Sign the request with the private key.
+        $sign = hash("sha256", $this->api_key . $query);
+
+        $requestUrl = "$this->resourcespace_api_url" . $query . "&sign=" . $sign;
+        $response = file_get_contents($requestUrl);
+
+        return json_decode($response);
     }
 }
