@@ -119,7 +119,7 @@ class repository_resourcespace extends repository {
         return array('path'=>$path, 'url'=>$url);
     }
 
-    function supported_filetypes() {
+    public function supported_filetypes() {
         return '*';
     }
 
@@ -127,12 +127,12 @@ class repository_resourcespace extends repository {
         return false;
     }
 
-    function supported_returntypes() {
+    public function supported_returntypes() {
         return FILE_INTERNAL;
     }
 
     public static function get_type_option_names() {
-        return array_merge(parent::get_type_option_names(), array('resourcespace_api_url','api_user','api_key','enable_help','enable_help_url'));
+        return array_merge(parent::get_type_option_names(), array('resourcespace_api_url', 'api_user', 'api_key', 'enable_help', 'enable_help_url'));
     }
 
     public static function type_config_form($mform, $classname = 'repository') {
