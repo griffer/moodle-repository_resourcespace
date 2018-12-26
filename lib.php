@@ -45,11 +45,6 @@ class repository_resourcespace extends repository {
         return $listArray;
     }
 
-    public function print_search() {
-        $search = '<input class="form-control" id="reposearch" name="s" placeholder="Search" type="search">';
-        return $search;
-    }
-
     public function search($search_text, $page = 0) {
         $search_text = optional_param('s', '*', PARAM_TEXT);
 
