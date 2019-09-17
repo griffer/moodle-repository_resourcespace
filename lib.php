@@ -35,69 +35,44 @@ class repository_resourcespace extends repository {
     }
 
     public function get_listing($path = '', $page = '') {
-        $listArray = Array();
-        $listArray['list'] = array();
-        $listArray['norefresh'] = true;
-        $listArray['nologin'] = true;
+        if ($path !== '') {
+            // Redirect to search, asking to list files within the given collection
+            return $this->search(sprintf('!collection%s', $path), $page);
+        }
+
+        $listArray = array(
+            'list' => $this->do_search_collections(),
+            'norefresh' => true,
+            'nologin' => true,
+            'dynload' => true,
+            'issearchresult' => false,
+        );
+
         if ($this->enable_help == 1) {
             $listArray['help'] = "$this->enable_help_url";
-        } 
+        }
+
         return $listArray;
     }
 
-    public function print_search() {    
-        $search = '<input class="form-control" id="reposearch" name="s" placeholder="Search" type="search">';
-        return $search;
-    }
+    public function search($searchText, $page = 0) {
+        $listArray = array(
+            'list' => array(),
+            'norefresh' => true,
+            'nologin' => true,
+            'dynload' => true,
+            'issearchresult' => true,
+        );
 
-    public function search($search_text, $page = 0) {
-        $search_text = optional_param('s', '*', PARAM_TEXT);
-        
-        $search_text = urlencode($search_text);
-
-        // Resourcespace search string.
-        $query= "user=" . "$this->api_user" . "&function=search_get_previews&param1=$search_text"
-        . "&param2=&param3=&param4=&param5=-1&param6=desc&param7=&param8=thm,scr&param9=";      
-
-        // Sign the request with the private key.
-        $sign = hash("sha256",$this->api_key . $query);
-
-        // Send request to server.
-        $response = (file_get_contents("$this->resourcespace_api_url" . $query . "&sign=" . $sign));
-
-        $jsonArray = json_decode($response);
-
-        $listArray = Array();
-
-        // Working around a minor resourcespace bug, where resourcespace returns an error
-        // when no files match the search. Afterwards the response is parsed.
-        if (is_array($jsonArray)) {
-            foreach($jsonArray as $value){
-                $ref = $value->ref;
-                $id = $value->field8;
-                $thumbnail = $value->url_thm;
-                $src = $value->url_scr;
-                $srcExtension = $value->file_extension;
-                $modifyDate = $value->file_modified;
-                $modifyDate = strtotime($modifyDate);
-                // Parsing the resourcespace ref and file extension as the filesource, because the
-                // resourcespace api does not return the actual source at this point.
-                $list[] = array('title' => "$id",
-                                'thumbnail' => $thumbnail,
-                                'source' => "$ref,$srcExtension",
-                                'datemodified' => "$modifyDate",
-                                'author' => 'IA Sprog');
-            }
-            $listArray['list'] = $list;
-        } else {
-            $listArray['list'] = array();
-        }
-        $listArray['norefresh'] = true;
-        $listArray['nologin'] = true;
         if ($this->enable_help == 1) {
             $listArray['help'] = "$this->enable_help_url";
-        } 
-        $listArray['issearchresult'] = true;
+        }
+
+        $collections = $this->do_search_collections($searchText);
+        $resources = $this->do_search_resources($searchText);
+
+        $listArray['list'] = array_merge($collections, $resources);
+
         return $listArray;
     }
 
@@ -105,21 +80,22 @@ class repository_resourcespace extends repository {
         // We have to catch the url, and make an additional request to the resourcespace api,
         // to get the actual filesource.
         $fileInfo = explode(',', $url);
-        $subQuery = "user=" . "$this->api_user" . "&function=get_resource_path&param1=" . "$fileInfo[0]" ."&param2&param3=&param4=&param5=" . "$fileInfo[1]" . "&param6=&param7=&param8=";
-        $sign = hash("sha256",$this->api_key . $subQuery);
-        $fileSource = (file_get_contents("$this->resourcespace_api_url" . $subQuery . "&sign=" . $sign));
-        $fileSource = json_decode($fileSource);
-        $url = $fileSource;
-        $path = $this->prepare_file($filename);
-        $c = new curl;
-        $result = $c->download_one($url, null, array('filepath' => $path, 'timeout' => self::GETFILE_TIMEOUT));
-        if ($result !== true) {
-            throw new moodle_exception('errorwhiledownload', 'repository', '', $result);
-        }
-        return array('path'=>$path, 'url'=>$url);
+
+        $resourceUrl = $this->make_api_request('get_resource_path', array(
+            'param1' => $fileInfo[0], // $resource
+            'param2' => '0',          // $getfilepath
+            'param3' => '',           // $size
+            'param5' => $fileInfo[1], // $extension
+        ));
+
+        // Call the method of the parent class, then overwrite the URL back to what was passed to us
+        $result = parent::get_file($resourceUrl, $filename);
+        $result['url'] = $url;
+
+        return $result;
     }
 
-    function supported_filetypes() {
+    public function supported_filetypes() {
         return '*';
     }
 
@@ -127,12 +103,12 @@ class repository_resourcespace extends repository {
         return false;
     }
 
-    function supported_returntypes() {
+    public function supported_returntypes() {
         return FILE_INTERNAL;
     }
 
     public static function get_type_option_names() {
-        return array_merge(parent::get_type_option_names(), array('resourcespace_api_url','api_user','api_key','enable_help','enable_help_url'));
+        return array_merge(parent::get_type_option_names(), array('resourcespace_api_url', 'api_user', 'api_key', 'enable_help', 'enable_help_url'));
     }
 
     public static function type_config_form($mform, $classname = 'repository') {
@@ -163,5 +139,71 @@ class repository_resourcespace extends repository {
 
         $mform->addElement('text', 'enable_help_url', get_string('enable_help_url', 'repository_resourcespace'));
         $mform->addElement('static', null, '', get_string('enable_help_url_help', 'repository_resourcespace'));
+    }
+
+    // Perform a search for collections and return a list of elements suitable for Moodle
+    protected function do_search_collections($searchText = '') {
+        $list = array();
+
+        $collections = $this->make_api_request('search_public_collections', array(
+            'param1' => $searchText,
+            // 'param2' => 'c.name',
+        ));
+
+        if (is_array($collections)) {
+            foreach ($collections as $collection) {
+                $list[] = array(
+                    'title' => $collection->name,
+                    'path' => $collection->ref,
+                    'date' => strtotime($collection->created),
+                    'children' => array(),
+                );
+            }
+        }
+
+        return $list;
+    }
+
+    // Perform a search for resources and return a list of elements suitable for Moodle
+    protected function do_search_resources($searchText = '') {
+        $list = array();
+
+        $resources = $this->make_api_request('search_get_previews', array(
+            'param1' => $searchText, // $search
+            // 'param3' => 'title',     // $order_by
+            'param5' => '-1',        // $fetchrows
+            'param8' => 'thm',       // $getsizes
+        ));
+
+        if (is_array($resources)) {
+            foreach ($resources as $resource) {
+                $list[] = array(
+                    'title' => $resource->field8,
+                    'thumbnail' => $resource->url_thm,
+                    // Parsing the resourcespace ref and file extension as the filesource, because the
+                    // resourcespace api does not return the actual source at this point.
+                    'source' => sprintf('%s,%s', $resource->ref, $resource->file_extension),
+                    'datemodified' => strtotime($resource->file_modified),
+                );
+            }
+        }
+
+        return $list;
+    }
+
+    // Make an API request
+    protected function make_api_request($method, $queryData) {
+        $queryData['user'] = $this->api_user;
+        $queryData['function'] = $method;
+
+        $query = http_build_query($queryData, '', '&');
+
+        // Sign the request with the private key.
+        $sign = hash("sha256", $this->api_key . $query);
+
+        $requestUrl = "$this->resourcespace_api_url" . $query . "&sign=" . $sign;
+        $response = file_get_contents($requestUrl);
+
+        return json_decode($response);
     }
 }
