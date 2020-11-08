@@ -95,6 +95,72 @@ class repository_resourcespace extends repository {
         return $result;
     }
 
+    
+    /**
+     * Prepare file reference information.
+     *
+     * @inheritDocs
+     */
+    public function get_file_reference($source) {
+        global $USER;
+        $reference = new stdClass;
+        $reference->userid = $USER->id;
+        $reference->username = fullname($USER);
+        $reference->path = $source;
+
+        // Determine whether we are downloading the file, or should use a file reference.
+        $usefilereference = optional_param('usefilereference', false, PARAM_BOOL);
+        if ($usefilereference) {
+            $fileInfo = explode(',', $source);
+            $resourceUrl = $this->make_api_request('get_resource_path', array(
+                'param1' => $fileInfo[0], // $resource
+                'param2' => '0',          // $getfilepath
+                'param3' => '',           // $size
+                'param5' => $fileInfo[1], // $extension
+            
+            ));
+            if ($resourceUrl) {
+                $reference->url = $resourceUrl;
+                $reference->filename= $source;
+            }
+        }
+        $serial_reference = serialize($reference);
+        return $serial_reference;
+    }
+
+    /**
+     * Return file URL for external link.
+     *
+     * @inheritDocs
+     */
+    public function get_link($reference) {
+        // $unpacked = $this->unpack_reference($reference);
+        $unpacked = unserialize($reference);
+
+        return $this->get_file_download_link($unpacked->url);
+    }
+
+    /**
+     * Sends the file to be saved 
+     *
+     * @param string $sharedurl
+     * @return string
+     */
+    public function send_file($stored_file, $lifetime=86400 , $filter=0, $forcedownload=false, array $options = null) {
+
+        // Example taken from repository_equella
+        $reference = unserialize($stored_file->get_reference());
+        $url = $reference->url;
+        if ($url) {
+
+            header('Location: ' . $url);
+        } else {
+
+            send_file_not_found();
+        }
+    }
+
+
     public function supported_filetypes() {
         return '*';
     }
@@ -104,7 +170,10 @@ class repository_resourcespace extends repository {
     }
 
     public function supported_returntypes() {
-        return FILE_INTERNAL;
+        // return FILE_INTERNAL;
+        return FILE_INTERNAL | FILE_EXTERNAL | FILE_REFERENCE | FILE_CONTROLLED_LINK;
+        // return FILE_INTERNAL | FILE_EXTERNAL;
+        // return FILE_INTERNAL | FILE_EXTERNAL | FILE_REFERENCE;
     }
 
     public static function get_type_option_names() {
