@@ -102,6 +102,11 @@ class repository_resourcespace extends repository {
      * @inheritDocs
      */
     public function get_file_reference($source) {
+
+        return $source;
+
+        // TODO: remove original code...
+
         global $USER;
         $reference = new stdClass;
         $reference->userid = $USER->id;
@@ -134,10 +139,17 @@ class repository_resourcespace extends repository {
      * @inheritDocs
      */
     public function get_link($reference) {
-        // $unpacked = $this->unpack_reference($reference);
-        $unpacked = unserialize($reference);
+        // We have to catch the url, and make an additional request to the resourcespace api,
+        // to get the actual URL.
+        $fileInfo = explode(',', $reference);
 
-        return $this->get_file_download_link($unpacked->url);
+        $resourceUrl = $this->make_api_request('get_resource_path', array(
+            'param1' => $fileInfo[0], // $resource
+            'param2' => '0',          // $getfilepath
+            'param3' => '',           // $size
+            'param5' => $fileInfo[1], // $extension
+        ));
+        return $resourceUrl;
     }
 
     /**
@@ -247,7 +259,7 @@ class repository_resourcespace extends repository {
         if (is_array($resources)) {
             foreach ($resources as $resource) {
                 $list[] = array(
-                    'title' => $resource->field8,
+                    'title' => $resource->field8.'.'.$resource->file_extension,
                     'thumbnail' => $resource->url_thm,
                     // Parsing the resourcespace ref and file extension as the filesource, because the
                     // resourcespace api does not return the actual source at this point.
