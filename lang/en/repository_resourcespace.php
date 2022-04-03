@@ -15,3 +15,4 @@ $string['enable_help_help'] = 'This will display a help link in the filepicker';
 
 $string['enable_help_url'] = 'Help button url';
 $string['enable_help_url_help'] = 'Url the help button should link to';
+$string['resourcespace:view'] = 'Can view ResourceSpace items';
